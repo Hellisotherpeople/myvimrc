@@ -12,9 +12,9 @@ import h5py
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
+plt.switch_backend('agg')
 
-X, y = make_blobs(n_samples=10, centers=2, n_features=2,
-                  random_state=42, cluster_std=3.2)
+X, y = make_moons(n_samples=1000, random_state=42)
 # X, y = make_regression(n_samples=100, n_features=2, n_informative=1, random_state=43)
 org_y = y
 y = np.asarray([[i] for i in np.absolute(y)])
@@ -27,7 +27,7 @@ class Neural_Network(object):
         # parameters
         self.inputSize = 2
         self.outputSize = 1
-        self.hiddenSize = 5
+        self.hiddenSize = 30
         self.w1_population_list = num_population * [None]
         self.w2_population_list = num_population * [None]
         self.num_population = num_population
@@ -38,6 +38,7 @@ class Neural_Network(object):
         self.W2 = []
         self.pop_matrix = self.initialize_population()
         self.mutation_probability = mutation_probability
+        self.iterator = 0
 
     def forward(self, X):
         # forward propagation through our network
@@ -115,6 +116,22 @@ class Neural_Network(object):
 
         # print(self.w1_population_list)
 
+    def plot_decision_boundary(self):
+        # Set min and max values and give it some padding
+        x_min, x_max = X[:, 0].min() - .5, X[:, 0].max() + .5
+        y_min, y_max = X[:, 1].min() - .5, X[:, 1].max() + .5
+        h = 0.3
+        # Generate a grid of points with distance h between them
+        xx, yy = np.meshgrid(np.arange(x_min, x_max, h), np.arange(y_min, y_max, h))
+        Z = np.c_[xx.ravel(), yy.ravel()] ##I'm not good enough at numpy to say that I just "knew" that this is what I wanted.. thank you stack overflow
+        Z = NN.forward(Z)
+        Z = Z.reshape(xx.shape)
+        # Plot the contour and training examples
+        cp = plt.contourf(xx, yy, Z, cmap=plt.cm.coolwarm_r)
+        if self.iterator == 1:
+            plt.colorbar(cp)
+        plt.scatter(X[:, 0], X[:, 1], c=org_y, cmap=plt.cm.Spectral)
+
     def sigmoid(self, s):
         # activation function
         return 1/(1+np.exp(-s))
@@ -144,60 +161,98 @@ class Neural_Network(object):
         weight_vals = self.pop_matrix[:, :, 0]
         # print(a)
         # the average fitness of each network
-        network_avg_fitness = fitness_vals.sum(axis=1) / self.total_size
-        # print(network_avg_fitness)
-        most_fit_networks_i = network_avg_fitness.argpartition(
-            2)[0:2]  # get smallest N fitnesses indicies
-        # the actual networks
-        most_fit_networks = weight_vals[most_fit_networks_i]
+        best_fitness = 1
+        while self.iterator < 50000000000:
+            network_avg_fitness = fitness_vals.sum(axis=1) / self.total_size
+            # print(network_avg_fitness)
+            most_fit_networks_i = network_avg_fitness.argpartition(
+                    2)[:2]  # get smallest N fitnesses indicies
+            worst_network_i = network_avg_fitness.argpartition(-1)[-1:]
+            # the actual networks
+            most_fit_networks = fitness_vals[most_fit_networks_i]
+            most_fit_networks_weight = weight_vals[most_fit_networks_i]
+            least_fit_networks = fitness_vals[worst_network_i]
+            least_fit_networks_weight = weight_vals[worst_network_i]
 
-        for i in range(1, len(most_fit_networks_i)):
-            NN.convert_to_weights(most_fit_networks_i[i-1], False)
-            w1_first_parent = self.W1
-            w2_first_parent = self.W2
-            self.convert_to_weights(most_fit_networks_i[i], False)
-            w1_second_parent = self.W1
-            w2_second_parent = self.W2
-            w1_child1, w1_child2 = self.crossover(
-                w1_first_parent, w1_second_parent)
-            w2_child1, w2_child2 = self.crossover(
-                w2_first_parent, w2_second_parent)
-            if random.random() < self.mutation_probability:
-                w1_child1 = self.mutate(w1_child1, 0.8)
-#                w1_child2 = self.mutate(w1_child2, 0.3)
-                w2_child1 = self.mutate(w2_child1, 0.8)
-#                w2_child2 = self.mutate(w2_child2, 0.3)
-        self.W1 = w1_child1
-        self.W2 = w2_child1
-        new_prediction_1 = self.forward(X)
-        new_fitness_1 = self.rmse(new_prediction_1, y)
-        new_weights_1 = np.concatenate((w1_child1.ravel(),w2_child1.ravel()))
-        self.W1 = w1_child2
-        self.W2 = w2_child2
-        new_prediction_2 = self.forward(X)
-        new_fitness_2 = self.rmse(new_prediction_2, y)
-        new_weights_2 = np.concatenate((w1_child2.ravel(),w2_child2.ravel()))
-        #print(new_weights)
-        print(most_fit_networks)
+            for i in range(1, len(most_fit_networks_i)):
+                self.convert_to_weights(most_fit_networks_i[i-1], False)
+                w1_first_parent = self.W1
+                w2_first_parent = self.W2
+                best_pred = self.forward(X)
+                check_fitness = self.rmse(best_pred, y)
+                if best_fitness > check_fitness:
+                    best_fitness = check_fitness
+                    self.plot_decision_boundary()
+                    plt.pause(0.001)
+                    print("best fitness " + str(best_fitness) + " generation: " + str(self.iterator))
+                self.convert_to_weights(most_fit_networks_i[i], False)
+                w1_second_parent = self.W1
+                w2_second_parent = self.W2
+                w1_child1, w1_child2 = self.crossover(
+                    w1_first_parent, w1_second_parent)
+                w2_child1, w2_child2 = self.crossover(
+                    w2_first_parent, w2_second_parent)
+                if random.random() < self.mutation_probability:
+                    w1_child1 = self.mutate(w1_child1, 0.8)
+    #                w1_child2 = self.mutate(w1_child2, 0.3)
+                    w2_child1 = self.mutate(w2_child1, 0.8)
+    #                w2_child2 = self.mutate(w2_child2, 0.3)
+            self.W1 = w1_child1
+            self.W2 = w2_child1
+            new_prediction_1 = self.forward(X)
+            new_fitness_1 = self.rmse(new_prediction_1, y)
+            new_weights_1 = np.concatenate((w1_child1.ravel(), w2_child1.ravel()))
+            #self.W1 = w1_child2
+            #self.W2 = w2_child2
+            #new_prediction_2 = self.forward(X)
+            #new_fitness_2 = self.rmse(new_prediction_2, y)
+            #new_weights_2 = np.concatenate((w1_child2.ravel(), w2_child2.ravel()))# end of recombine 
+            # print(new_weights)
+            #print(fitness_vals)
+            weight_vals[worst_network_i] = new_weights_1 #new weight replacement!
+            #np.apply_along_axis(fitness_vals[worst_network_i], 0
+            for k in range(0, self.total_size):
+                fitness_vals[worst_network_i, k] = np.mean([fitness_vals[worst_network_i, k],new_fitness_1]) #fitness replacement
+            #print(fitness_vals)
+            #print(worst_network_i)
+            #print(self.pop_matrix[:,0:1,0])
+            for j in range(0, self.total_size):
+                np.random.shuffle(self.pop_matrix[:,j,:])#permutate all values
+            self.iterator+=1
+            #print(self.pop_matrix[:,0:1,0])
+
+'''
         # lowest fitness is furthest to the right
-        num_to_replace = -math.floor(self.total_size/3)
+        num_to_replace = -math.floor(self.total_size/3) #TODO: REPLACE THE BAD WEIGHTS IN THE SUBPOPULATIONS, NOT IN EACH NETWORK:w
         least_fit_sorted_networks = []
         for fit_network in most_fit_networks:
             least_fit_sorted_networks.append(fit_network.argsort(axis=0))
         least_fit_sorted_networks = np.asarray(least_fit_sorted_networks)
-        to_replace = least_fit_sorted_networks[:,num_to_replace:]
-        #print(to_replace)
+        to_replace = least_fit_sorted_networks[:, num_to_replace:]
         flipped_replace = np.flip(to_replace, axis=1)
         print(flipped_replace)
-        #most_fit_networks[0][to_replace][0].put(new_weights[to_replace][0])
-        #most_fit_networks[0][to_replace][0].put(n = 9
         print("------------------")
-        k = 1 #because I don't know how to index better 
-        print(most_fit_networks[k:k+1,flipped_replace[k]]) #print the worst performing neurons
+        k = 1  # because I don't know how to index better
+        # print the worst performing neurons
+        print(most_fit_networks[k:k+1, flipped_replace[k]])
         print(new_weights_1)
-        print(new_weights_1[flipped_replace[0]]) #the weights we will replace it with
-
-NN = Neural_Network(10, 100, 1)
+        # the weights we will replace it with
+        len_weight = len(new_weights_1[flipped_replace[0]])
+        print(len_weight)
+        # np.copyto(most_fit_networks[k:k+1, flipped_replace[k]], new_weights_1[flipped_replace[0]]) #replace elements
+        # replace weights, but we still have to update values
+        broad = np.repeat(new_fitness_1, len_weight, axis=0)
+        most_fit_networks_weight[:, flipped_replace[k]
+                                 ] = new_weights_1[flipped_replace[0]] #replace weights 
+        most_fit_networks[:, flipped_replace[k]] = np.mean((most_fit_networks[:, flipped_replace[k]], broad), axis=0) #and replace values (possibly buggy) 
+        weight_vals[most_fit_networks_i]= most_fit_networks_weight
+        fitness_vals[most_fit_networks_i] = most_fit_networks
+        #print(fitness_vals[most_fit_networks_i])
+        #print(fitness_vals)
+        #shuffled = np.random.shuffle(self.pop_matrix)
+        print(self.pop_matrix[:,0,:])
+'''
+NN = Neural_Network(10, 100, 5)
 
 for i in range(0, 10):
     NN.convert_to_weights(i, True)
